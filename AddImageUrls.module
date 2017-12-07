@@ -1,0 +1,164 @@
+<?php namespace ProcessWire;
+
+/**
+ *
+ * Add Image URLs
+ *
+ * @author Robin Sallis
+ *
+ * ProcessWire 3.x
+ * Copyright (C) 2011 by Ryan Cramer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * http://www.processwire.com
+ * http://www.ryancramer.com
+ *
+ */
+
+class AddImageUrls extends WireData implements Module {
+
+	/**
+	 * Module information
+	 */
+	public static function getModuleInfo() {
+		return array(
+			'title' => "Add Image URLs",
+			'version' => '0.1.0',
+			'author' => 'Robin Sallis',
+			'href' => 'https://github.com/Toutouwai/AddImageUrls',
+			'summary' => 'Allows images to be added to an images field by pasting URLs.',
+			'icon' => 'picture-o',
+			'autoload' => "template=admin",
+		);
+	}
+
+	/**
+	 * Ready
+	 */
+	public function ready() {
+		$this->addHookAfter('InputfieldImage::render', $this, 'modifyImageInputfield');
+		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
+		$this->addHookAfter('Pages::saveReady', $this, 'processInput');
+	}
+
+	/**
+	 * Modify image inputfield
+	 *
+	 * @param HookEvent $event
+	 */
+	public function modifyImageInputfield(HookEvent $event) {
+		if($this->page->process != 'ProcessPageEdit') return;
+
+		$inputfield = $event->object;
+		$out = $event->return;
+		$page = $inputfield->hasPage;
+		$field = $inputfield->hasField;
+
+		$button_text = $this->_('Paste URLs');
+		$placeholder_text = $this->_('Paste URLs to image files here, one per line…');
+
+		$button = "<button class='url-upload-toggle ui-button ui-widget ui-corner-all ui-state-default ui-priority-secondary'><span class='ui-button-text'><i class='fa fa-clipboard'></i> $button_text</span></button>";
+		$out = str_replace("<span class='InputfieldImageValidExtensions", "$button<span class='InputfieldImageValidExtensions", $out);
+		$out .= "
+<div class='url-upload-container'>
+<textarea name='urlUpload*{$field->name}*{$page->id}' rows='2' placeholder='$placeholder_text'></textarea>
+</div>
+";
+		$event->return = $out;
+	}
+
+	/**
+	 * Add JS and CSS dependencies
+	 *
+	 * @param HookEvent $event
+	 */
+	public function addDependencies(HookEvent $event) {
+		// Return if ProcessPageEdit is being loaded via AJAX (image field)
+		if($this->config->ajax) return;
+
+		// Add JS and CSS dependencies
+		$config = $this->config;
+		$info = $this->getModuleInfo();
+		$version = (int) $info['version'];
+		$config->scripts->add($config->urls->{$this} . "{$this}.js?v={$version}");
+		$config->styles->add($config->urls->{$this} . "{$this}.css?v={$version}");
+	}
+
+	/**
+	 * Process image URLs in $input
+	 *
+	 * @param HookEvent $event
+	 */
+	public function processInput(HookEvent $event) {
+		// Only for ProcessPageEdit
+		if($this->page->process != 'ProcessPageEdit') return;
+
+		foreach($this->input->post as $key => $value) {
+
+			// Ignore unrelated input
+			if(substr($key, 0, 9) !== 'urlUpload' || empty($value)) continue;
+
+			// Get variables from key name
+			list($junk, $field_name, $page_id) = explode('*', $key);
+			$field_name = $this->sanitizer->fieldName($field_name);
+			$page = $this->pages->get((int) $page_id);
+			$field = $this->fields->get($field_name);
+
+			// Skip if the user does not have edit access for the page and field
+			$editable = false;
+			if($page->editable($field_name)) $editable = true;
+			if($page instanceof RepeaterPage && $page->getForPage()->editable($page->getForField()->name)) $editable = true;
+			if(!$editable) {
+				$this->error( $this->_('You do not have permission to edit this field.') );
+				continue;
+			}
+
+			// How many more uploads allowed?
+			if($field->maxFiles == 1) {
+				$remaining_uploads = 1; // Single image field is allowed to be overwritten
+			} elseif($field->maxFiles) {
+				$remaining_uploads = $field->maxFiles - count($page->$field_name);
+			} else {
+				$remaining_uploads = 9999;
+			}
+
+			// Determine allowed extensions
+			$allowed_extensions = explode(' ', $field->extensions);
+
+			// Get array of URLs
+			$urls = preg_split("/\r\n|\n|\r/", $value);
+
+			$page->of(false);
+			foreach($urls as $url) {
+				// Break if the images field is full
+				if($remaining_uploads < 1) {
+					$this->warning( sprintf($this->_('Max file upload limit reached for field "%s".'), $field_name) );
+					break;
+				}
+				// Must be a valid URL
+				if(!filter_var($url, FILTER_VALIDATE_URL)) {
+					$this->error( sprintf($this->_('%s is not a valid URL.'), $url) );
+					continue;
+				}
+				// Must have an allowed extension
+				$parts = pathinfo($url);
+				if(!isset($parts['extension']) || !in_array($parts['extension'], $allowed_extensions)) {
+					$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $parts['extension'], $field_name) );
+					continue;
+				}
+				// If it's a single image field and there's an existing image, remove it (as per the core upload behaviour)
+				if($field->maxFiles == 1 && count($page->$field_name)) $page->$field_name->removeAll();
+				// Add the image to the field
+				$page->$field_name->add($url);
+				// Decrement remaining uploads
+				$remaining_uploads--;
+			}
+			// Prevent this input being processed again later (avoid recursion)
+			$this->input->post->$key = '';
+			// Save
+			$page->save();
+
+		}
+	}
+
+}
