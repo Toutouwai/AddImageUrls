@@ -148,8 +148,20 @@ class AddImageUrls extends WireData implements Module {
 				}
 				// If it's a single image field and there's an existing image, remove it (as per the core upload behaviour)
 				if($field->maxFiles == 1 && count($page->$field_name)) $page->$field_name->removeAll();
-				// Add the image to the field
-				$page->$field_name->add($url);
+				// Create Pageimage
+				$pageimage = new Pageimage($page->$field_name, $url);
+				// Resize to maximum width/height if necessary
+				if($field->maxWidth && $field->maxWidth < $pageimage->width || $field->maxHeight && $field->maxHeight < $pageimage->height) {
+					$width = $field->maxWidth ?: 0;
+					$height = $field->maxHeight ?: 0;
+					if($width && $pageimage->width >= $pageimage->height) $height = 0;
+					if($height && $pageimage->width < $pageimage->height) $width = 0;
+					$sizer = new ImageSizer($pageimage->filename);
+					$sizer->setUpscaling(false);
+					$sizer->resize($width, $height);
+				}
+				// Add the Pageimage to the field
+				$page->$field_name->add($pageimage);
 				// Decrement remaining uploads
 				$remaining_uploads--;
 			}
