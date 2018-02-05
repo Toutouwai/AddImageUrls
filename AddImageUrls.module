@@ -23,7 +23,7 @@ class AddImageUrls extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => "Add Image URLs",
-			'version' => '0.1.0',
+			'version' => '0.1.2',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'summary' => 'Allows images to be added to an images field by pasting URLs.',
@@ -47,11 +47,12 @@ class AddImageUrls extends WireData implements Module {
 	 * @param HookEvent $event
 	 */
 	public function modifyImageInputfield(HookEvent $event) {
-		if($this->page->process != 'ProcessPageEdit') return;
+		// Only for ProcessPageEdit
+		if($this->process != 'ProcessPageEdit') return;
 
 		$inputfield = $event->object;
 		$out = $event->return;
-		$page = $inputfield->hasPage;
+		$page = $this->process->getPage();
 		$field = $inputfield->hasField;
 
 		$button_text = $this->_('Paste URLs');
@@ -103,6 +104,7 @@ class AddImageUrls extends WireData implements Module {
 			$field_name = $this->sanitizer->fieldName($field_name);
 			$page = $this->pages->get((int) $page_id);
 			$field = $this->fields->get($field_name);
+			$field_value = $page->getUnformatted($field_name);
 
 			// Skip if the user does not have edit access for the page and field
 			$editable = false;
@@ -117,7 +119,7 @@ class AddImageUrls extends WireData implements Module {
 			if($field->maxFiles == 1) {
 				$remaining_uploads = 1; // Single image field is allowed to be overwritten
 			} elseif($field->maxFiles) {
-				$remaining_uploads = $field->maxFiles - count($page->$field_name);
+				$remaining_uploads = $field->maxFiles - count($field_value);
 			} else {
 				$remaining_uploads = 9999;
 			}
@@ -147,9 +149,9 @@ class AddImageUrls extends WireData implements Module {
 					continue;
 				}
 				// If it's a single image field and there's an existing image, remove it (as per the core upload behaviour)
-				if($field->maxFiles == 1 && count($page->$field_name)) $page->$field_name->removeAll();
+				if($field->maxFiles == 1 && count($field_value)) $field_value->removeAll();
 				// Create Pageimage
-				$pageimage = new Pageimage($page->$field_name, $url);
+				$pageimage = new Pageimage($field_value, $url);
 				// Resize to maximum width/height if necessary
 				if($field->maxWidth && $field->maxWidth < $pageimage->width || $field->maxHeight && $field->maxHeight < $pageimage->height) {
 					$width = $field->maxWidth ?: 0;
@@ -161,7 +163,7 @@ class AddImageUrls extends WireData implements Module {
 					$sizer->resize($width, $height);
 				}
 				// Add the Pageimage to the field
-				$page->$field_name->add($pageimage);
+				$field_value->add($pageimage);
 				// Decrement remaining uploads
 				$remaining_uploads--;
 			}
