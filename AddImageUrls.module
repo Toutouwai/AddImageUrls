@@ -80,7 +80,7 @@ class AddImageUrls extends WireData implements Module {
 		// Add JS and CSS dependencies
 		$config = $this->config;
 		$info = $this->getModuleInfo();
-		$version = (int) $info['version'];
+		$version = $info['version'];
 		$config->scripts->add($config->urls->{$this} . "{$this}.js?v={$version}");
 		$config->styles->add($config->urls->{$this} . "{$this}.css?v={$version}");
 	}
