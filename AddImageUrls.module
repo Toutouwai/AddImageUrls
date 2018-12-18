@@ -28,7 +28,8 @@ class AddImageUrls extends WireData implements Module {
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'summary' => 'Allows images to be added to an images field by pasting URLs.',
 			'icon' => 'picture-o',
-			'autoload' => "template=admin",
+			'autoload' => 'template=admin',
+			'requires' => 'ProcessWire>=3.0.0',
 		);
 	}
 
