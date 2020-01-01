@@ -134,6 +134,10 @@ class AddImageUrls extends WireData implements Module {
 			$page->of(false);
 			foreach($urls as $url) {
 				$url = trim($url);
+				
+				// remove the query string
+				$url = strtok($url, '?');
+
 				// Break if the images field is full
 				if($remaining_uploads < 1) {
 					$this->warning( sprintf($this->_('Max file upload limit reached for field "%s".'), $field_name) );
