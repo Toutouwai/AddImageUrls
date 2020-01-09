@@ -23,8 +23,8 @@ class AddImageUrls extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => "Add Image URLs",
-			'summary' => 'Allows images to be added to an images field by pasting URLs.',
-			'version' => '0.1.3',
+			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
+			'version' => '0.2.0',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -37,30 +37,37 @@ class AddImageUrls extends WireData implements Module {
 	 * Ready
 	 */
 	public function ready() {
-		$this->addHookAfter('InputfieldImage::render', $this, 'modifyImageInputfield');
+		$this->addHookAfter('InputfieldFile::render', $this, 'modifyInputfield');
 		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
-		$this->addHookAfter('Pages::saveReady', $this, 'processInput');
+		$this->addHookAfter('ProcessPageEdit::processInput', $this, 'processInput');
 	}
 
 	/**
-	 * Modify image inputfield
+	 * Modify inputfield
 	 *
 	 * @param HookEvent $event
 	 */
-	protected function modifyImageInputfield(HookEvent $event) {
-		// Only for ProcessPageEdit
-		if($this->process != 'ProcessPageEdit') return;
+	protected function modifyInputfield(HookEvent $event) {
+		// Only for ProcessPageEdit or ProcessUser
+		if($this->process != 'ProcessPageEdit' && $this->process != 'ProcessUser') return;
 
 		$inputfield = $event->object;
+		$is_image_inputfield = $inputfield instanceof InputfieldImage;
 		$out = $event->return;
-		$page = $this->process->getPage();
+		$page = $inputfield->hasPage;
 		$field = $inputfield->hasField;
 
 		$button_text = $this->_('Paste URLs');
-		$placeholder_text = $this->_('Paste URLs to image files here, one per line…');
+		if($is_image_inputfield) {
+			$placeholder_text = $this->_('Paste URLs to images here, one per line…');
+		} else {
+			$placeholder_text = $this->_('Paste URLs to files here, one per line…');
+		}
 
 		$button = "<button class='url-upload-toggle ui-button ui-widget ui-corner-all ui-state-default ui-priority-secondary'><span class='ui-button-text'><i class='fa fa-clipboard'></i> $button_text</span></button>";
-		$out = str_replace("<span class='InputfieldImageValidExtensions", "$button<span class='InputfieldImageValidExtensions", $out);
+		$find = array("<span class='InputfieldImageValidExtensions", "<span class='InputfieldFileValidExtensions");
+		$replace = array("$button<span class='InputfieldImageValidExtensions", "$button<span class='InputfieldFileValidExtensions");
+		$out = str_replace($find, $replace, $out);
 		$out .= "
 <div class='url-upload-container'>
 <textarea name='urlUpload*{$field->name}*{$page->id}' rows='2' placeholder='$placeholder_text'></textarea>
@@ -75,7 +82,7 @@ class AddImageUrls extends WireData implements Module {
 	 * @param HookEvent $event
 	 */
 	protected function addDependencies(HookEvent $event) {
-		// Return if ProcessPageEdit is being loaded via AJAX (image field)
+		// Return if ProcessPageEdit is being loaded via AJAX
 		if($this->config->ajax) return;
 
 		// Add JS and CSS dependencies
@@ -87,13 +94,15 @@ class AddImageUrls extends WireData implements Module {
 	}
 
 	/**
-	 * Process image URLs in $input
+	 * Process URLs in $input
 	 *
 	 * @param HookEvent $event
 	 */
 	protected function processInput(HookEvent $event) {
-		// Only for ProcessPageEdit
-		if($this->page->process != 'ProcessPageEdit') return;
+
+		$form = $event->arguments(0);
+		// Only for main Page Edit form
+		if($form->name !== 'ProcessPageEdit') return;
 
 		foreach($this->input->post as $key => $value) {
 
@@ -105,12 +114,21 @@ class AddImageUrls extends WireData implements Module {
 			$field_name = $this->sanitizer->fieldName($field_name);
 			$page = $this->pages->get((int) $page_id);
 			$field = $this->fields->get($field_name);
+			$is_image_field = $field->type instanceof FieldtypeImage;
 			$field_value = $page->getUnformatted($field_name);
 
 			// Skip if the user does not have edit access for the page and field
 			$editable = false;
-			if($page->editable($field_name)) $editable = true;
-			if($page instanceof RepeaterPage && $page->getForPage()->editable($page->getForField()->name)) $editable = true;
+			if($page instanceof RepeaterPage) {
+				// Check field and Repeater field are editable
+				if(!$field->useRoles || $field->editable()) {
+					$repeater_field = $page->getForField();
+					if(!$repeater_field->useRoles || $repeater_field->editable()) $editable = true;
+				}
+			} else {
+				// Check page and field are editable
+				if($page->editable($field_name)) $editable = true;
+			}
 			if(!$editable) {
 				$this->error( $this->_('You do not have permission to edit this field.') );
 				continue;
@@ -118,7 +136,7 @@ class AddImageUrls extends WireData implements Module {
 
 			// How many more uploads allowed?
 			if($field->maxFiles == 1) {
-				$remaining_uploads = 1; // Single image field is allowed to be overwritten
+				$remaining_uploads = 1; // Single image/file field is allowed to be overwritten
 			} elseif($field->maxFiles) {
 				$remaining_uploads = $field->maxFiles - count($field_value);
 			} else {
@@ -134,7 +152,7 @@ class AddImageUrls extends WireData implements Module {
 			$page->of(false);
 			foreach($urls as $url) {
 				$url = trim($url);
-				// Break if the images field is full
+				// Break if the field is full
 				if($remaining_uploads < 1) {
 					$this->warning( sprintf($this->_('Max file upload limit reached for field "%s".'), $field_name) );
 					break;
@@ -145,32 +163,36 @@ class AddImageUrls extends WireData implements Module {
 					continue;
 				}
 				// Must have an allowed extension
-				$parts = pathinfo($url);
-				if(!isset($parts['extension']) || !in_array(strtolower($parts['extension']), $allowed_extensions)) {
-					$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $parts['extension'], $field_name) );
+				$parsed_url = parse_url($url);
+				$extension = strtolower(pathinfo($parsed_url['path'], PATHINFO_EXTENSION));
+				if(!in_array($extension, $allowed_extensions)) {
+					$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field_name) );
 					continue;
 				}
-				// If it's a single image field and there's an existing image, remove it (as per the core upload behaviour)
+				// If it's a single image/file field and there's an existing image/file, remove it (as per the core upload behaviour)
 				if($field->maxFiles == 1 && count($field_value)) $field_value->removeAll();
-				// Create Pageimage
-				$pageimage = new Pageimage($field_value, $url);
-				// Resize to maximum width/height if necessary
-				if($field->maxWidth && $field->maxWidth < $pageimage->width || $field->maxHeight && $field->maxHeight < $pageimage->height) {
-					$width = $field->maxWidth ?: 0;
-					$height = $field->maxHeight ?: 0;
-					if($width && $pageimage->width >= $pageimage->height) $height = 0;
-					if($height && $pageimage->width < $pageimage->height) $width = 0;
-					$sizer = new ImageSizer($pageimage->filename);
-					$sizer->setUpscaling(false);
-					$sizer->resize($width, $height);
+				// Create Pagefile
+				if($is_image_field) {
+					$pagefile = new Pageimage($field_value, $url);
+					// Resize to maximum width/height if necessary
+					if($field->maxWidth && $field->maxWidth < $pagefile->width || $field->maxHeight && $field->maxHeight < $pagefile->height) {
+						$width = $field->maxWidth ?: 0;
+						$height = $field->maxHeight ?: 0;
+						if($width && $pagefile->width >= $pagefile->height) $height = 0;
+						if($height && $pagefile->width < $pagefile->height) $width = 0;
+						$sizer = new ImageSizer($pagefile->filename);
+						$sizer->setUpscaling(false);
+						$sizer->resize($width, $height);
+					}
+				} else {
+					$pagefile = new Pagefile($field_value, $url);
 				}
-				// Add the Pageimage to the field
-				$field_value->add($pageimage);
+
+				// Add the Pagefile to the field
+				$field_value->add($pagefile);
 				// Decrement remaining uploads
 				$remaining_uploads--;
 			}
-			// Prevent this input being processed again later (avoid recursion)
-			$this->input->post->$key = '';
 			// Save
 			$page->save();
 
