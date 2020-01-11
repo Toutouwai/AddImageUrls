@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.0',
+			'version' => '0.2.1',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -162,13 +162,34 @@ class AddImageUrls extends WireData implements Module {
 					$this->error( sprintf($this->_('%s is not a valid URL.'), $url) );
 					continue;
 				}
-				// Must have an allowed extension
+				// Validate file extension if one exists
 				$parsed_url = parse_url($url);
-				$extension = strtolower(pathinfo($parsed_url['path'], PATHINFO_EXTENSION));
-				if(!in_array($extension, $allowed_extensions)) {
-					$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field_name) );
-					continue;
+				$path_parts = pathinfo($parsed_url['path']);
+				$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
+				if($extension) {
+					if(!in_array($extension, $allowed_extensions)) {
+						$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field_name) );
+						continue;
+					}
+				} else {
+					// Remote file has no extension, so download to temp directory
+					$files = $this->wire('files');
+					$td = $files->tempDir($this->className);
+					$td_path = (string) $td;
+					$destination = $td_path . $path_parts['basename'];
+					copy($url, $destination);
+					$mime_type = mime_content_type($destination);
+					$add_extension = array_search($mime_type, $this->wire('config')->fileContentTypes);
+					// Add file extension if valid for the field
+					if(in_array($add_extension, $allowed_extensions)) {
+						$url = "$destination.$add_extension";
+						$files->rename($destination, $url);
+					} else {
+						$this->error( sprintf($this->_('The remote file %1$s has no file extension and its MIME type does not correspond with a valid file extension for field "%2$s".'), $url, $field_name) );
+						continue;
+					}
 				}
+
 				// If it's a single image/file field and there's an existing image/file, remove it (as per the core upload behaviour)
 				if($field->maxFiles == 1 && count($field_value)) $field_value->removeAll();
 				// Create Pagefile
