@@ -15,7 +15,7 @@
  *
  */
 
-class AddImageUrls extends WireData implements Module {
+class AddImageUrls extends WireData implements Module, ConfigurableModule {
 
 	/**
 	 * Module information
@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.1',
+			'version' => '0.2.2',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -179,7 +179,14 @@ class AddImageUrls extends WireData implements Module {
 					$destination = $td_path . $path_parts['basename'];
 					copy($url, $destination);
 					$mime_type = mime_content_type($destination);
-					$add_extension = array_search($mime_type, $this->wire('config')->fileContentTypes);
+					$mime_mappings = [];
+					$mapping_lines = preg_split('/[\r\n]+/', $this->mime_types);
+					foreach($mapping_lines as $line) {
+						$pieces = explode(':', $line, 2);
+						if(count($pieces) < 2) continue;
+						$mime_mappings[$pieces[0]] = $pieces[1];
+					}
+					$add_extension = isset($mime_mappings[$mime_type]) ? $mime_mappings[$mime_type] : '';
 					// Add file extension if valid for the field
 					if(in_array($add_extension, $allowed_extensions)) {
 						$url = "$destination.$add_extension";
@@ -218,6 +225,64 @@ class AddImageUrls extends WireData implements Module {
 			$page->save();
 
 		}
+	}
+
+	/**
+	 * Save default mime types to config
+	 */
+	protected function saveDefaultMimeTypes() {
+		$mime_types = <<<EOT
+text/plain:txt
+application/pdf:pdf
+application/msword:docx
+application/excel:xlsx
+application/rtf:rtf
+image/gif:gif
+image/jpeg:jpg
+image/png:png
+image/svg+xml:svg
+image/webp:webp
+EOT;
+		$this->wire('modules')->saveConfig($this->className, 'mime_types', $mime_types);
+	}
+
+	/**
+	 * Install
+	 */
+	public function ___install() {
+		// Save default mime types to config
+		$this->saveDefaultMimeTypes();
+	}
+
+	/**
+	 * Upgrade
+	 *
+	 * @param $fromVersion
+	 * @param $toVersion
+	 */
+	public function ___upgrade($fromVersion, $toVersion) {
+		// Upgrade from < v0.2.2: save default mime types to config
+		if(version_compare($fromVersion, '0.2.2', '<')) {
+			$this->saveDefaultMimeTypes();
+		}
+	}
+
+	/**
+	 * Config inputfields
+	 *
+	 * @param InputfieldWrapper $inputfields
+	 */
+	public function getModuleConfigInputfields($inputfields) {
+		$modules = $this->wire('modules');
+
+		/* @var InputfieldTextarea $f */
+		$f = $modules->InputfieldTextarea;
+		$f_name = 'mime_types';
+		$f->name = $f_name;
+		$f->label = $this->_('MIME types');
+		$f->description = $this->_('Enter MIME type > file extension mappings in the format "MIME type:file extension", one per line. File extensions should be lower case. These mappings are used when validating URLs to files that do not have file extensions.');
+		$f->value = $this->$f_name;
+		$inputfields->add($f);
 	}
 
 }
