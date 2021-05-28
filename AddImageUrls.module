@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.3',
+			'version' => '0.2.4',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -168,7 +168,15 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 				}
 				// Validate file extension if one exists
 				$parsed_url = parse_url($url);
+				if(empty($parsed_url['path'])) {
+					$this->error( sprintf($this->_('The URL %s has no parsable path.'), $url) );
+					continue;
+				}
 				$path_parts = pathinfo($parsed_url['path']);
+				if(empty($path_parts['basename'])) {
+					$this->error( sprintf($this->_('The URL %s has no parsable basename.'), $url) );
+					continue;
+				}
 				$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
 				if($extension) {
 					if(!in_array($extension, $allowed_extensions)) {
@@ -181,7 +189,11 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 					$td = $files->tempDir($this->className);
 					$td_path = (string) $td;
 					$destination = $td_path . $path_parts['basename'];
-					copy($url, $destination);
+					$success = @copy($url, $destination);
+					if(!$success) {
+						$this->error( sprintf($this->_('No file could be downloaded from URL %s'), $url) );
+						continue;
+					}
 					$mime_type = mime_content_type($destination);
 					$mime_mappings = [];
 					$mapping_lines = preg_split('/[\r\n]+/', $this->mime_types);
