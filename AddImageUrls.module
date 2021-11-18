@@ -28,7 +28,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
-			'autoload' => 'template=admin',
+			'autoload' => true,
 			'requires' => 'ProcessWire>=3.0.0',
 		);
 	}
@@ -37,6 +37,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	 * Ready
 	 */
 	public function ready() {
+		$this->addHookMethod('Pagefiles::addFromUrl', $this, 'addFromUrl');
 		$this->addHookAfter('InputfieldFile::render', $this, 'modifyInputfield');
 		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
 		$this->addHookAfter('ProcessPageEdit::processInput', $this, 'processInput');
@@ -118,7 +119,6 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			$field_name = $this->wire()->sanitizer->fieldName($field_name);
 			$page = $this->wire()->pages->get((int) $page_id);
 			$field = $this->wire()->fields->get($field_name);
-			$is_image_field = $field->type instanceof FieldtypeImage;
 			$field_value = $page->getUnformatted($field_name);
 
 			// Skip if the user does not have edit access for the page and field
@@ -153,94 +153,160 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			// Get array of URLs
 			$urls = preg_split("/\r\n|\n|\r/", $value);
 
-			$page->of(false);
-			foreach($urls as $url) {
-				$url = trim($url);
-				// Break if the field is full
-				if($remaining_uploads < 1) {
-					$this->warning( sprintf($this->_('Max file upload limit reached for field "%s".'), $field_name) );
-					break;
-				}
-				// Must be a valid URL
-				if(!filter_var($url, FILTER_VALIDATE_URL)) {
-					$this->error( sprintf($this->_('%s is not a valid URL.'), $url) );
-					continue;
-				}
-				// Validate file extension if one exists
-				$parsed_url = parse_url($url);
-				if(empty($parsed_url['path'])) {
-					$this->error( sprintf($this->_('The URL %s has no parsable path.'), $url) );
-					continue;
-				}
-				$path_parts = pathinfo($parsed_url['path']);
-				if(empty($path_parts['basename'])) {
-					$this->error( sprintf($this->_('The URL %s has no parsable basename.'), $url) );
-					continue;
-				}
-				$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
-				if($extension) {
-					if(!in_array($extension, $allowed_extensions)) {
-						$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field_name) );
-						continue;
-					}
-				} else {
-					// Remote file has no extension, so download to temp directory
-					$files = $this->wire()->files;
-					$td = $files->tempDir($this->className);
-					$td_path = (string) $td;
-					$destination = $td_path . $path_parts['basename'];
-					$success = @copy($url, $destination);
-					if(!$success) {
-						$this->error( sprintf($this->_('No file could be downloaded from URL %s'), $url) );
-						continue;
-					}
-					$mime_type = mime_content_type($destination);
-					$mime_mappings = [];
-					$mapping_lines = preg_split('/[\r\n]+/', $this->mime_types);
-					foreach($mapping_lines as $line) {
-						$pieces = explode(':', $line, 2);
-						if(count($pieces) < 2) continue;
-						$mime_mappings[$pieces[0]] = $pieces[1];
-					}
-					$add_extension = isset($mime_mappings[$mime_type]) ? $mime_mappings[$mime_type] : '';
-					// Add file extension if valid for the field
-					if(in_array($add_extension, $allowed_extensions)) {
-						$url = "$destination.$add_extension";
-						$files->rename($destination, $url);
-					} else {
-						$this->error( sprintf($this->_('The remote file %1$s has no file extension and its MIME type does not correspond with a valid file extension for field "%2$s".'), $url, $field_name) );
-						continue;
-					}
-				}
-
-				// If it's a single image/file field and there's an existing image/file, remove it (as per the core upload behaviour)
-				if($field->maxFiles == 1 && count($field_value)) $field_value->removeAll();
-				// Create Pagefile
-				if($is_image_field) {
-					$pagefile = new Pageimage($field_value, $url);
-					// Resize to maximum width/height if necessary
-					if($field->maxWidth && $field->maxWidth < $pagefile->width || $field->maxHeight && $field->maxHeight < $pagefile->height) {
-						$width = $field->maxWidth ?: 0;
-						$height = $field->maxHeight ?: 0;
-						if($width && $pagefile->width >= $pagefile->height) $height = 0;
-						if($height && $pagefile->width < $pagefile->height) $width = 0;
-						$sizer = new ImageSizer($pagefile->filename);
-						$sizer->setUpscaling(false);
-						$sizer->resize($width, $height);
-					}
-				} else {
-					$pagefile = new Pagefile($field_value, $url);
-				}
-
-				// Add the Pagefile to the field
-				$field_value->add($pagefile);
-				// Decrement remaining uploads
-				$remaining_uploads--;
-			}
-			// Save
-			$page->save();
+			$this->addUrlsToField(
+				$page,
+				$urls,
+				$field,
+				$field_value,
+				$remaining_uploads,
+				$allowed_extensions
+			);
 
 		}
+	}
+
+	/**
+	 * Add image(s) through API using $field->addFromUrl($urls)
+	 * 
+	 * Can be a string with one or multiple URLs separated by a comma or an
+	 * array of URLs
+	 * 
+	 * @param HookEvent $event
+	 */
+	protected function addFromUrl(HookEvent $event) {
+
+		$urls = $event->arguments(0);
+		if(empty($urls)) return;
+
+		$page = $event->object->getPage();
+		$field = $event->object->getField();
+		$field_value = $page->getUnformatted($field->name);
+
+		// How many more uploads allowed?
+		if($field->maxFiles == 1) {
+			$remaining_uploads = 1; // Single image/file field is allowed to be overwritten
+		} elseif($field->maxFiles) {
+			$remaining_uploads = $field->maxFiles - count($field_value);
+		} else {
+			$remaining_uploads = 9999;
+		}
+
+		// Determine allowed extensions
+		$allowed_extensions = explode(' ', $field->extensions);
+
+		// Get array of URLs
+		if(is_string($urls)) {
+			$urls = explode(",", trim($urls));
+		} elseif(!is_array($urls)) {
+			// if the URLs turns out to be neither a string nor an array, abort
+			return;
+		}
+
+		$this->addUrlsToField(
+			$page,
+			$urls,
+			$field,
+			$field_value,
+			$remaining_uploads,
+			$allowed_extensions
+		);
+	}
+
+	protected function addUrlsToField(
+		Page $page,
+		$urls,
+		$field,
+		$field_value,
+		$remaining_uploads,
+		$allowed_extensions
+	) {
+
+		$page->of(false);
+		foreach($urls as $url) {
+			$url = trim($url);
+			// Break if the field is full
+			if($remaining_uploads < 1) {
+				$this->warning( sprintf($this->_('Max file upload limit reached for field "%s".'), $field->name) );
+				break;
+			}
+			// Must be a valid URL
+			if(!filter_var($url, FILTER_VALIDATE_URL)) {
+				$this->error( sprintf($this->_('%s is not a valid URL.'), $url) );
+				continue;
+			}
+			// Validate file extension if one exists
+			$parsed_url = parse_url($url);
+			if(empty($parsed_url['path'])) {
+				$this->error( sprintf($this->_('The URL %s has no parsable path.'), $url) );
+				continue;
+			}
+			$path_parts = pathinfo($parsed_url['path']);
+			if(empty($path_parts['basename'])) {
+				$this->error( sprintf($this->_('The URL %s has no parsable basename.'), $url) );
+				continue;
+			}
+			$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
+			if($extension) {
+				if(!in_array($extension, $allowed_extensions)) {
+					$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field->name) );
+					continue;
+				}
+			} else {
+				// Remote file has no extension, so download to temp directory
+				$files = $this->wire()->files;
+				$td = $files->tempDir($this->className);
+				$td_path = (string) $td;
+				$destination = $td_path . $path_parts['basename'];
+				$success = @copy($url, $destination);
+				if(!$success) {
+					$this->error( sprintf($this->_('No file could be downloaded from URL %s'), $url) );
+					continue;
+				}
+				$mime_type = mime_content_type($destination);
+				$mime_mappings = [];
+				$mapping_lines = preg_split('/[\r\n]+/', $this->mime_types);
+				foreach($mapping_lines as $line) {
+					$pieces = explode(':', $line, 2);
+					if(count($pieces) < 2) continue;
+					$mime_mappings[$pieces[0]] = $pieces[1];
+				}
+				$add_extension = isset($mime_mappings[$mime_type]) ? $mime_mappings[$mime_type] : '';
+				// Add file extension if valid for the field
+				if(in_array($add_extension, $allowed_extensions)) {
+					$url = "$destination.$add_extension";
+					$files->rename($destination, $url);
+				} else {
+					$this->error( sprintf($this->_('The remote file %1$s has no file extension and its MIME type does not correspond with a valid file extension for field "%2$s".'), $url, $field->name) );
+					continue;
+				}
+			}
+
+			// If it's a single image/file field and there's an existing image/file, remove it (as per the core upload behaviour)
+			if($field->maxFiles == 1 && count($field_value)) $field_value->removeAll();
+			// Create Pagefile
+			if($field->type instanceof FieldtypeImage) {
+				$pagefile = new Pageimage($field_value, $url);
+				// Resize to maximum width/height if necessary
+				if($field->maxWidth && $field->maxWidth < $pagefile->width || $field->maxHeight && $field->maxHeight < $pagefile->height) {
+					$width = $field->maxWidth ?: 0;
+					$height = $field->maxHeight ?: 0;
+					if($width && $pagefile->width >= $pagefile->height) $height = 0;
+					if($height && $pagefile->width < $pagefile->height) $width = 0;
+					$sizer = new ImageSizer($pagefile->filename);
+					$sizer->setUpscaling(false);
+					$sizer->resize($width, $height);
+				}
+			} else {
+				$pagefile = new Pagefile($field_value, $url);
+			}
+
+			// Add the Pagefile to the field
+			$field_value->add($pagefile);
+			// Decrement remaining uploads
+			$remaining_uploads--;
+		}
+		// Save
+		$page->save();
 	}
 
 	/**
