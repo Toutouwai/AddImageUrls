@@ -205,11 +205,11 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			if($remaining_uploads < 1) {
 				$message = sprintf($this->_('Max file upload limit reached for field "%s".'), $field->name);
 				if($from_api) {
-					throw new WireException($message);
+					$this->wire()->log->warning($message);
 				} else {
 					$this->warning($message);
-					break;
 				}
+				break;
 			}
 			// Must be a valid URL
 			if(!filter_var($url, FILTER_VALIDATE_URL)) {
