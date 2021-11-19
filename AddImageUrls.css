@@ -1,4 +1,4 @@
-.url-upload-toggle { margin-left:4px; }
+.url-upload-toggle { margin-left:4px; vertical-align:top !important; }
 .AdminThemeDefault .url-upload-toggle { padding-top:0.53em !important; padding-bottom:0.53em !important; }
 .AdminThemeReno .url-upload-toggle .ui-button-text { padding-top:8px; padding-bottom:8px; }
 .url-upload-container { overflow:hidden; display:none; }
