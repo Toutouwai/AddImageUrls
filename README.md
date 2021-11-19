@@ -20,4 +20,13 @@ A `addFromUrl` method is also added to the API to achieve the same result. The a
 - a URL: "https://domain.com/image.jpg"
 - an array of URLs: ["https://domain.com/image1.jpg", "https://domain.com/image2.jpg"]
 
-Should you have an issue using the method, please have a look at the "errors" log to check if something is wrong with your URL(s).
+Example:
+```php
+$of = $page->of();
+$page->of(false);
+$page->file_field->addFromUrl("https://domain.com/path-to-file.ext");
+// No need to call $page->save() as it's already done in the method
+$page->of($of);
+```
+
+Should you have an issue using the method, please have a look at the "errors" log to check if something was wrong with your URL(s).
