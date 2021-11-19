@@ -119,7 +119,6 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			$field_name = $this->wire()->sanitizer->fieldName($field_name);
 			$page = $this->wire()->pages->get((int) $page_id);
 			$field = $this->wire()->fields->get($field_name);
-			$field_value = $page->getUnformatted($field_name);
 
 			// Skip if the user does not have edit access for the page and field
 			$editable = false;
@@ -138,40 +137,23 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 				continue;
 			}
 
-			// How many more uploads allowed?
-			if($field->maxFiles == 1) {
-				$remaining_uploads = 1; // Single image/file field is allowed to be overwritten
-			} elseif($field->maxFiles) {
-				$remaining_uploads = $field->maxFiles - count($field_value);
-			} else {
-				$remaining_uploads = 9999;
-			}
-
-			// Determine allowed extensions
-			$allowed_extensions = explode(' ', $field->extensions);
-
 			// Get array of URLs
 			$urls = preg_split("/\r\n|\n|\r/", $value);
 
-			$this->addUrlsToField(
-				$page,
-				$urls,
-				$field,
-				$field_value,
-				$remaining_uploads,
-				$allowed_extensions
-			);
+			$this->addUrlsToField($urls, $page, $field);
 
 		}
 	}
 
 	/**
-	 * Add image(s) through API using $field->addFromUrl($urls)
+	 * Add image(s) from URL(s) using the API
 	 * 
-	 * Can be a string with one or multiple URLs separated by a comma or an
-	 * array of URLs
+	 * The argument is expected to be either:
+	 * - a string with a URL "https://domain.com/image.jpg"
+	 * - an array of URLs ["https://domain.com/image1.jpg", "https://domain.com/image2.jpg"]
 	 * 
 	 * @param HookEvent $event
+	 * @throws WireException
 	 */
 	protected function addFromUrl(HookEvent $event) {
 
@@ -180,6 +162,28 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 
 		$page = $event->object->getPage();
 		$field = $event->object->getField();
+
+		// Convert to an array
+		if(is_string($urls)) {
+			$urls = [trim($urls)];
+		} elseif(!is_array($urls)) {
+			// if the URLs turns out to be neither a string nor an array, abort
+			throw new WireException("Unexpected format");
+		}
+
+		$this->addUrlsToField($urls, $page, $field, true);
+	}
+
+	/**
+	 * Convert URL(s) to Pagefile (or Pageimage) and add it to the field
+	 * 
+	 * @param array $urls Array of URLs
+	 * @param Page $page Page holding the field
+	 * @param Field $field Field to add the file (image) to
+	 * @param bool $from_api If from API throw WireException instead of warnings
+	 * @throws WireException
+	 */
+	protected function addUrlsToField($urls, $page, $field, $from_api = false) {
 		$field_value = $page->getUnformatted($field->name);
 
 		// How many more uploads allowed?
@@ -194,61 +198,59 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		// Determine allowed extensions
 		$allowed_extensions = explode(' ', $field->extensions);
 
-		// Get array of URLs
-		if(is_string($urls)) {
-			$urls = explode(",", trim($urls));
-		} elseif(!is_array($urls)) {
-			// if the URLs turns out to be neither a string nor an array, abort
-			return;
-		}
-
-		$this->addUrlsToField(
-			$page,
-			$urls,
-			$field,
-			$field_value,
-			$remaining_uploads,
-			$allowed_extensions
-		);
-	}
-
-	protected function addUrlsToField(
-		Page $page,
-		$urls,
-		$field,
-		$field_value,
-		$remaining_uploads,
-		$allowed_extensions
-	) {
-
 		$page->of(false);
 		foreach($urls as $url) {
 			$url = trim($url);
 			// Break if the field is full
 			if($remaining_uploads < 1) {
-				$this->warning( sprintf($this->_('Max file upload limit reached for field "%s".'), $field->name) );
-				break;
+				$message = sprintf($this->_('Max file upload limit reached for field "%s".'), $field->name);
+				if($from_api) {
+					throw new WireException($message);
+				} else {
+					$this->warning($message);
+					break;
+				}
 			}
 			// Must be a valid URL
 			if(!filter_var($url, FILTER_VALIDATE_URL)) {
-				$this->error( sprintf($this->_('%s is not a valid URL.'), $url) );
+				$message = sprintf($this->_('%s is not a valid URL.'), $url);
+				if($from_api) {
+					$this->wire()->log->error($message);
+				} else {
+					$this->error($message);
+				}
 				continue;
 			}
 			// Validate file extension if one exists
 			$parsed_url = parse_url($url);
 			if(empty($parsed_url['path'])) {
-				$this->error( sprintf($this->_('The URL %s has no parsable path.'), $url) );
+				$message = sprintf($this->_('The URL %s has no parsable path.'), $url);
+				if($from_api) {
+					$this->wire()->log->error($message);
+				} else {
+					$this->error($message);
+				}
 				continue;
 			}
 			$path_parts = pathinfo($parsed_url['path']);
 			if(empty($path_parts['basename'])) {
-				$this->error( sprintf($this->_('The URL %s has no parsable basename.'), $url) );
+				$message = sprintf($this->_('The URL %s has no parsable basename.'), $url);
+				if($from_api) {
+					$this->wire()->log->error($message);
+				} else {
+					$this->error($message);
+				}
 				continue;
 			}
 			$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
 			if($extension) {
 				if(!in_array($extension, $allowed_extensions)) {
-					$this->error( sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field->name) );
+					$message = sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field->name);
+					if($from_api) {
+						$this->wire()->log->error($message);
+					} else {
+						$this->error($message);
+					}
 					continue;
 				}
 			} else {
@@ -259,7 +261,12 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 				$destination = $td_path . $path_parts['basename'];
 				$success = @copy($url, $destination);
 				if(!$success) {
-					$this->error( sprintf($this->_('No file could be downloaded from URL %s'), $url) );
+					$message = sprintf($this->_('No file could be downloaded from URL %s'), $url);
+					if($from_api) {
+						$this->wire()->log->error($message);
+					} else {
+						$this->error($message);
+					}
 					continue;
 				}
 				$mime_type = mime_content_type($destination);
@@ -276,7 +283,12 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 					$url = "$destination.$add_extension";
 					$files->rename($destination, $url);
 				} else {
-					$this->error( sprintf($this->_('The remote file %1$s has no file extension and its MIME type does not correspond with a valid file extension for field "%2$s".'), $url, $field->name) );
+					$message = sprintf($this->_('The remote file %1$s has no file extension and its MIME type does not correspond with a valid file extension for field "%2$s".'), $url, $field->name);
+					if($from_api) {
+						$this->wire()->log->error($message);
+					} else {
+						$this->error($message);
+					}
 					continue;
 				}
 			}
