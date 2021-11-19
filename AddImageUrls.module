@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.4',
+			'version' => '0.2.5',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
