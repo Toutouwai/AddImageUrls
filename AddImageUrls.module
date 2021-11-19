@@ -37,7 +37,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	 * Ready
 	 */
 	public function ready() {
-		$this->addHook('Pagefiles::addFromUrl', $this, 'addFromUrl');
+		$this->addHookMethod('Pagefiles::addFromUrl', $this, 'addFromUrl');
 		$this->addHookAfter('InputfieldFile::render', $this, 'modifyInputfield');
 		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
 		$this->addHookAfter('ProcessPageEdit::processInput', $this, 'processInput');
@@ -180,8 +180,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	 * @param array $urls Array of URLs
 	 * @param Page $page Page holding the field
 	 * @param Field $field Field to add the file (image) to
-	 * @param bool $from_api If from API throw WireException instead of warnings
-	 * @throws WireException
+	 * @param bool $from_api If from API log errors instead of showing admin notices
 	 */
 	protected function addUrlsToField($urls, $page, $field, $from_api = false) {
 		$field_value = $page->getUnformatted($field->name);
