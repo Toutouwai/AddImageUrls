@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.5',
+			'version' => '0.2.6',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -147,11 +147,11 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 
 	/**
 	 * Add image(s) from URL(s) using the API
-	 * 
+	 *
 	 * The argument is expected to be either:
 	 * - a string with a URL "https://domain.com/image.jpg"
 	 * - an array of URLs ["https://domain.com/image1.jpg", "https://domain.com/image2.jpg"]
-	 * 
+	 *
 	 * @param HookEvent $event
 	 * @throws WireException
 	 */
@@ -176,7 +176,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 
 	/**
 	 * Convert URL(s) to Pagefile (or Pageimage) and add it to the field
-	 * 
+	 *
 	 * @param array $urls Array of URLs
 	 * @param Page $page Page holding the field
 	 * @param Field $field Field to add the file (image) to
@@ -317,7 +317,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			$remaining_uploads--;
 		}
 		// Save
-		$page->save();
+		$page->save($field);
 	}
 
 	/**

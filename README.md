@@ -16,17 +16,15 @@ You can add MIME type > file extension mappings in the module config. These mapp
 
 A "Paste URLs" button will be added to all Image and File fields. Use the button to show a textarea where URLs may be pasted, one per line. Images/files are added when the page is saved.
 
-A `addFromUrl` method is also added to the API to achieve the same result. The argument of this method is expected to be either:
+A `Pagefiles::addFromUrl` method is also added to the API to achieve the same result. The argument of this method is expected to be either:
 - a URL: "https://domain.com/image.jpg"
 - an array of URLs: ["https://domain.com/image1.jpg", "https://domain.com/image2.jpg"]
 
 Example:
 ```php
-$of = $page->of();
-$page->of(false);
-$page->file_field->addFromUrl("https://domain.com/path-to-file.ext");
+// Get unformatted value of File/Image field to be sure that it's an instance of Pagefiles
+$page->getUnformatted('file_field')->addFromUrl("https://domain.com/path-to-file.ext");
 // No need to call $page->save() as it's already done in the method
-$page->of($of);
 ```
 
 Should you have an issue using the method, please have a look at the "errors" log to check if something was wrong with your URL(s).
