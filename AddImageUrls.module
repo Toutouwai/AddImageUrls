@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.6',
+			'version' => '0.2.7',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -242,54 +242,56 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 				continue;
 			}
 			$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
-			if($extension) {
-				if(!in_array($extension, $allowed_extensions)) {
-					$message = sprintf($this->_('%1$s is not an allowed extension for field "%2$s".'), $extension, $field->name);
-					if($from_api) {
-						$this->wire()->log->error($message);
-					} else {
-						$this->error($message);
-					}
-					continue;
-				}
-			} else {
-				// Remote file has no extension, so download to temp directory
-				$files = $this->wire()->files;
-				$td = $files->tempDir($this->className);
-				$td_path = (string) $td;
-				$destination = $td_path . $path_parts['basename'];
-				$success = @copy($url, $destination);
-				if(!$success) {
-					$message = sprintf($this->_('No file could be downloaded from URL %s'), $url);
-					if($from_api) {
-						$this->wire()->log->error($message);
-					} else {
-						$this->error($message);
-					}
-					continue;
-				}
-				$mime_type = mime_content_type($destination);
-				$mime_mappings = [];
-				$mapping_lines = preg_split('/[\r\n]+/', $this->mime_types);
-				foreach($mapping_lines as $line) {
-					$pieces = explode(':', $line, 2);
-					if(count($pieces) < 2) continue;
-					$mime_mappings[$pieces[0]] = $pieces[1];
-				}
-				$add_extension = isset($mime_mappings[$mime_type]) ? $mime_mappings[$mime_type] : '';
-				// Add file extension if valid for the field
-				if(in_array($add_extension, $allowed_extensions)) {
-					$url = "$destination.$add_extension";
-					$files->rename($destination, $url);
+			if($extension && !in_array($extension, $allowed_extensions)) {
+				$message = sprintf($this->_('%s is not an allowed extension for field "%s".'), $extension, $field->name);
+				if($from_api) {
+					$this->wire()->log->error($message);
 				} else {
-					$message = sprintf($this->_('The remote file %1$s has no file extension and its MIME type does not correspond with a valid file extension for field "%2$s".'), $url, $field->name);
-					if($from_api) {
-						$this->wire()->log->error($message);
-					} else {
-						$this->error($message);
-					}
-					continue;
+					$this->error($message);
 				}
+				continue;
+			}
+
+			// Download file to temp directory
+			$files = $this->wire()->files;
+			$td = $files->tempDir($this->className);
+			$td_path = (string) $td;
+			$destination = $td_path . $path_parts['basename'];
+			$success = @copy($url, $destination);
+			if(!$success) {
+				$message = sprintf($this->_('No file could be downloaded from URL %s'), $url);
+				if($from_api) {
+					$this->wire()->log->error($message);
+				} else {
+					$this->error($message);
+				}
+				continue;
+			}
+			$mime_type = mime_content_type($destination);
+			$mime_mappings = [];
+			$mapping_lines = preg_split('/[\r\n]+/', $this->mime_types);
+			foreach($mapping_lines as $line) {
+				$pieces = explode(':', $line, 2);
+				if(count($pieces) < 2) continue;
+				$mime_mappings[$pieces[0]] = $pieces[1];
+			}
+			// Reject if MIME type doesn't correspond to an allowed extension
+			$mime_extension = isset($mime_mappings[$mime_type]) ? $mime_mappings[$mime_type] : '';
+			if(!in_array($mime_extension, $allowed_extensions)) {
+				$message = sprintf($this->_('The MIME type "%s" of remote file %s does not correspond with a valid file extension for field "%s".'), $mime_type, $url, $field->name);
+				if($from_api) {
+					$this->wire()->log->error($message);
+				} else {
+					$this->error($message);
+				}
+				continue;
+			}
+			// Change URL to local downloaded file
+			$url = $destination;
+			// If no file extension, add extension based on the MIME type
+			if(!$extension) {
+				$url .= ".$mime_extension";
+				$files->rename($destination, $url);
 			}
 
 			// If it's a single image/file field and there's an existing image/file, remove it (as per the core upload behaviour)
