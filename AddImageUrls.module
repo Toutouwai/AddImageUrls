@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.2.7',
+			'version' => '0.3.0',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -183,6 +183,8 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	 * @param bool $from_api If from API log errors instead of showing admin notices
 	 */
 	protected function addUrlsToField($urls, $page, $field, $from_api = false) {
+
+		$modules = $this->wire()->modules;
 		$field_value = $page->getUnformatted($field->name);
 
 		// How many more uploads allowed?
@@ -242,6 +244,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 				continue;
 			}
 			$extension = isset($path_parts['extension']) ? $path_parts['extension'] : '';
+			$extension = strtolower($extension);
 			if($extension && !in_array($extension, $allowed_extensions)) {
 				$message = sprintf($this->_('%s is not an allowed extension for field "%s".'), $extension, $field->name);
 				if($from_api) {
@@ -292,6 +295,14 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			if(!$extension) {
 				$url .= ".$mime_extension";
 				$files->rename($destination, $url);
+			}
+
+			// Convert WebP to JPG if WebpToJpg module is installed
+			if($extension === 'webp' || $mime_extension === 'webp') {
+				if($modules->isInstalled('WebpToJpg')) {
+					$webp_to_jpg = $modules->get('WebpToJpg');
+					$url = $webp_to_jpg->convertToWebp($url);
+				}
 			}
 
 			// If it's a single image/file field and there's an existing image/file, remove it (as per the core upload behaviour)

@@ -28,3 +28,7 @@ $page->getUnformatted('file_field')->addFromUrl("https://domain.com/path-to-file
 ```
 
 Should you have an issue using the method, please have a look at the "errors" log to check if something was wrong with your URL(s).
+
+### WebP conversion
+
+The core InputfieldImage does not support images in WebP format. But if you have the [WebP To Jpg](https://github.com/Toutouwai/WebpToJpg) module installed (v0.2.0 or newer) then any WebP images you add via Add Image URLs will be automatically converted to JPG format.
