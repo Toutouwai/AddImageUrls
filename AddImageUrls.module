@@ -24,7 +24,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		return array(
 			'title' => "Add Image URLs",
 			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.3.0',
+			'version' => '0.3.1',
 			'author' => 'Robin Sallis',
 			'href' => 'https://github.com/Toutouwai/AddImageUrls',
 			'icon' => 'picture-o',
@@ -40,7 +40,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		$this->addHookMethod('Pagefiles::addFromUrl', $this, 'addFromUrl');
 		$this->addHookAfter('InputfieldFile::render', $this, 'modifyInputfield');
 		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
-		$this->addHookAfter('ProcessPageEdit::processInput', $this, 'processInput');
+		$this->addHookBefore('ProcessPageEdit::processInput', $this, 'processInput');
 	}
 
 	/**
@@ -105,6 +105,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	 */
 	protected function processInput(HookEvent $event) {
 
+		/** @var InputfieldForm $form */
 		$form = $event->arguments(0);
 		// Only for main Page Edit form
 		if($form->name !== 'ProcessPageEdit') return;
@@ -140,8 +141,8 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			// Get array of URLs
 			$urls = preg_split("/\r\n|\n|\r/", $value);
 
+			// Add URLs to field
 			$this->addUrlsToField($urls, $page, $field);
-
 		}
 	}
 
@@ -329,6 +330,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 			// Decrement remaining uploads
 			$remaining_uploads--;
 		}
+
 		// Save
 		$page->save($field);
 	}
