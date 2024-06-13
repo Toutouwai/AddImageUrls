@@ -1,0 +1,16 @@
+.url-upload-toggle { margin-left:4px; vertical-align:top !important; }
+.AdminThemeDefault {
+	.url-upload-toggle { padding-top:0.53em !important; padding-bottom:0.53em !important; }
+}
+.AdminThemeReno {
+	.url-upload-toggle {
+		.ui-button-text { padding-top:8px; padding-bottom:8px; }
+	}
+}
+.url-upload-container { overflow:hidden; display:none;
+	textarea { margin-top:20px !important; resize:vertical !important; }
+}
+.aiu-always-visible {
+	.url-upload-toggle { display:none; }
+	.url-upload-container { display:block; }
+}

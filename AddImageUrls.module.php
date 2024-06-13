@@ -1,36 +1,24 @@
 <?php namespace ProcessWire;
 
-/**
- *
- * Add Image URLs
- *
- * @author Robin Sallis
- *
- * ProcessWire 3.x
- * Copyright (C) 2011 by Ryan Cramer
- * Licensed under GNU/GPL v2, see LICENSE.TXT
- *
- * http://www.processwire.com
- * http://www.ryancramer.com
- *
- */
-
 class AddImageUrls extends WireData implements Module, ConfigurableModule {
 
 	/**
-	 * Module information
+	 * Construct
 	 */
-	public static function getModuleInfo() {
-		return array(
-			'title' => "Add Image URLs",
-			'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-			'version' => '0.3.1',
-			'author' => 'Robin Sallis',
-			'href' => 'https://github.com/Toutouwai/AddImageUrls',
-			'icon' => 'picture-o',
-			'autoload' => true,
-			'requires' => 'ProcessWire>=3.0.0',
-		);
+	public function __construct() {
+		parent::__construct();
+		$this->mime_types = <<<EOT
+text/plain:txt
+application/pdf:pdf
+application/msword:docx
+application/excel:xlsx
+application/rtf:rtf
+image/gif:gif
+image/jpeg:jpg
+image/png:png
+image/svg+xml:svg
+image/webp:webp
+EOT;
 	}
 
 	/**
@@ -49,17 +37,19 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	 * @param HookEvent $event
 	 */
 	protected function modifyInputfield(HookEvent $event) {
+		// Only if process is an instance of WirePageEditor, but not ProcessProfile
 		$process = $this->wire()->process;
-		// Only for ProcessPageEdit or ProcessUser
-		if($process != 'ProcessPageEdit' && $process != 'ProcessUser') return;
-		// Only for edit mode of ProcessUser
-		if($process == 'ProcessUser' && $this->wire()->input->urlSegment1 !== 'edit') return;
+		if($process instanceof ProcessProfile) return;
+		if(!$process instanceof WirePageEditor) return;
 
+		/** @var InputfieldImage $inputfield */
 		$inputfield = $event->object;
 		$is_image_inputfield = $inputfield instanceof InputfieldImage;
 		$out = $event->return;
 		$page = $inputfield->hasPage;
 		$field = $inputfield->hasField;
+
+		if($this->always_show_field) $inputfield->addClass('aiu-always-visible', 'wrapClass');
 
 		$button_text = $this->_('Paste URLs');
 		if($is_image_inputfield) {
@@ -92,7 +82,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 		if($config->ajax) return;
 
 		// Add JS and CSS dependencies
-		$info = $this->getModuleInfo();
+		$info = $this->wire()->modules->getModuleInfo($this);
 		$version = $info['version'];
 		$config->scripts->add($config->urls->{$this} . "{$this}.js?v={$version}");
 		$config->styles->add($config->urls->{$this} . "{$this}.css?v={$version}");
@@ -186,6 +176,7 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	protected function addUrlsToField($urls, $page, $field, $from_api = false) {
 
 		$modules = $this->wire()->modules;
+		/** @var Pageimages $field_value */
 		$field_value = $page->getUnformatted($field->name);
 
 		// How many more uploads allowed?
@@ -336,46 +327,6 @@ class AddImageUrls extends WireData implements Module, ConfigurableModule {
 	}
 
 	/**
-	 * Save default mime types to config
-	 */
-	protected function saveDefaultMimeTypes() {
-		$mime_types = <<<EOT
-text/plain:txt
-application/pdf:pdf
-application/msword:docx
-application/excel:xlsx
-application/rtf:rtf
-image/gif:gif
-image/jpeg:jpg
-image/png:png
-image/svg+xml:svg
-image/webp:webp
-EOT;
-		$this->wire()->modules->saveConfig($this->className, 'mime_types', $mime_types);
-	}
-
-	/**
-	 * Install
-	 */
-	public function ___install() {
-		// Save default mime types to config
-		$this->saveDefaultMimeTypes();
-	}
-
-	/**
-	 * Upgrade
-	 *
-	 * @param $fromVersion
-	 * @param $toVersion
-	 */
-	public function ___upgrade($fromVersion, $toVersion) {
-		// Upgrade from < v0.2.2: save default mime types to config
-		if(version_compare($fromVersion, '0.2.2', '<')) {
-			$this->saveDefaultMimeTypes();
-		}
-	}
-
-	/**
 	 * Config inputfields
 	 *
 	 * @param InputfieldWrapper $inputfields
@@ -383,13 +334,22 @@ EOT;
 	public function getModuleConfigInputfields($inputfields) {
 		$modules = $this->wire()->modules;
 
-		/* @var InputfieldTextarea $f */
+		/** @var InputfieldTextarea $f */
 		$f = $modules->InputfieldTextarea;
 		$f_name = 'mime_types';
 		$f->name = $f_name;
 		$f->label = $this->_('MIME types');
 		$f->description = $this->_('Enter MIME type > file extension mappings in the format "MIME type:file extension", one per line. File extensions should be lower case. These mappings are used when validating URLs to files that do not have file extensions.');
 		$f->value = $this->$f_name;
+		$inputfields->add($f);
+
+		/** @var InputfieldCheckbox $f */
+		$f = $modules->get('InputfieldCheckbox');
+		$f_name = 'always_show_field';
+		$f->name = $f_name;
+		$f->label = $this->_('Always show URLs field');
+		$f->description = $this->_('When this option is checked the URLs field will be permanently visible instead of revealed when the "Paste URLs" button is clicked.');
+		$f->checked = $this->$f_name === 1 ? 'checked' : '';
 		$inputfields->add($f);
 	}
 
