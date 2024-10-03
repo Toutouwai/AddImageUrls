@@ -48,6 +48,8 @@ EOT;
 		$out = $event->return;
 		$page = $inputfield->hasPage;
 		$field = $inputfield->hasField;
+		if(!$page || $page->id) return;
+		if(!$field) return;
 
 		if($this->always_show_field) $inputfield->addClass('aiu-always-visible', 'wrapClass');
 
