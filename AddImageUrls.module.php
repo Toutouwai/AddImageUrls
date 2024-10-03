@@ -48,8 +48,10 @@ EOT;
 		$out = $event->return;
 		$page = $inputfield->hasPage;
 		$field = $inputfield->hasField;
-		if(!$page || $page->id) return;
+		if(!$page || !$page->id) return;
 		if(!$field) return;
+		// Exclude combo
+		if($inputfield->wrapAttr('data-combo-name') || $inputfield->wrapAttr('data-combo-num')) return;
 
 		if($this->always_show_field) $inputfield->addClass('aiu-always-visible', 'wrapClass');
 
