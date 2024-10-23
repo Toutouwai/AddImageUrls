@@ -12,6 +12,11 @@ A module for ProcessWire CMS/CMF. Allows images/files to be added to Image/File 
 
 You can add MIME type > file extension mappings in the module config. These mappings are used when validating URLs to files that do not have file extensions.
 
+You can define a user agent string for websites such as [Wikimedia](https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy) that require a User-Agent header to be set. Example: 
+```
+AddImageUrls/0.0 (https://github.com/Toutouwai/AddImageUrls; yourname@yourdomain.com)
+```
+
 ## Usage
 
 A "Paste URLs" button will be added to all Image and File fields. Use the button to show a textarea where URLs may be pasted, one per line. Images/files are added when the page is saved.

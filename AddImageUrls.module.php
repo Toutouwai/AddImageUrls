@@ -256,6 +256,7 @@ EOT;
 			$td = $files->tempDir($this->className);
 			$td_path = (string) $td;
 			$destination = $td_path . $path_parts['basename'];
+			if($this->user_agent) ini_set('user_agent', $this->user_agent);
 			$success = @copy($url, $destination);
 			if(!$success) {
 				$message = sprintf($this->_('No file could be downloaded from URL %s'), $url);
@@ -339,11 +340,20 @@ EOT;
 		$modules = $this->wire()->modules;
 
 		/** @var InputfieldTextarea $f */
-		$f = $modules->InputfieldTextarea;
+		$f = $modules->get('InputfieldTextarea');
 		$f_name = 'mime_types';
 		$f->name = $f_name;
 		$f->label = $this->_('MIME types');
 		$f->description = $this->_('Enter MIME type > file extension mappings in the format "MIME type:file extension", one per line. File extensions should be lower case. These mappings are used when validating URLs to files that do not have file extensions.');
+		$f->value = $this->$f_name;
+		$inputfields->add($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f_name = 'user_agent';
+		$f->name = $f_name;
+		$f->label = $this->_('User agent');
+		$f->description = $this->_('For websites that require a User-Agent header to be set, e.g. [Wikimedia](https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy).');
 		$f->value = $this->$f_name;
 		$inputfields->add($f);
 
@@ -355,6 +365,7 @@ EOT;
 		$f->description = $this->_('When this option is checked the URLs field will be permanently visible instead of revealed when the "Paste URLs" button is clicked.');
 		$f->checked = $this->$f_name === 1 ? 'checked' : '';
 		$inputfields->add($f);
+
 	}
 
 }
