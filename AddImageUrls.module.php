@@ -37,9 +37,10 @@ EOT;
 	 * @param HookEvent $event
 	 */
 	protected function modifyInputfield(HookEvent $event) {
-		// Only if process is an instance of WirePageEditor, but not ProcessProfile
+		// Only if process is an instance of WirePageEditor, but not ProcessProfile or ListerPro
 		$process = $this->wire()->process;
 		if($process instanceof ProcessProfile) return;
+		if($process instanceof ProcessPageListerPro) return;
 		if(!$process instanceof WirePageEditor) return;
 
 		/** @var InputfieldImage $inputfield */
