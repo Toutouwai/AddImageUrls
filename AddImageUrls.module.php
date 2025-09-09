@@ -178,7 +178,7 @@ EOT;
 	 * @param Field $field Field to add the file (image) to
 	 * @param bool $from_api If from API log errors instead of showing admin notices
 	 */
-	protected function addUrlsToField($urls, $page, $field, $from_api = false) {
+	protected function ___addUrlsToField($urls, $page, $field, $from_api = false) {
 
 		$modules = $this->wire()->modules;
 		/** @var Pageimages $field_value */
