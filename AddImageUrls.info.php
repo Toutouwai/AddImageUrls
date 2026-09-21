@@ -3,7 +3,7 @@
 $info = array(
 	'title' => "Add Image URLs",
 	'summary' => 'Allows images/files to be added to Image/File fields by pasting URLs.',
-	'version' => '0.3.6',
+	'version' => '0.3.7',
 	'author' => 'Robin Sallis',
 	'href' => 'https://github.com/Toutouwai/AddImageUrls',
 	'icon' => 'picture-o',
