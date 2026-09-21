@@ -257,10 +257,9 @@ EOT;
 			$td = $files->tempDir($this->className);
 			$td_path = (string) $td;
 			$destination = $td_path . $path_parts['basename'];
-			if($this->user_agent) ini_set('user_agent', $this->user_agent);
-			$success = @copy($url, $destination);
-			if(!$success) {
-				$message = sprintf($this->_('No file could be downloaded from URL %s'), $url);
+			$error = $this->downloadUrl($url, $destination);
+			if($error !== '') {
+				$message = sprintf($this->_('No file could be downloaded from URL %s'), $url) . " ($error)";
 				if($from_api) {
 					$this->wire()->log->error($message);
 				} else {
@@ -330,6 +329,42 @@ EOT;
 
 		// Save
 		$page->save($field);
+	}
+
+	/**
+	 * Download a URL to a local file
+	 *
+	 * Uses WireHttp, which tries curl first and falls back to fopen and then sockets, so
+	 * it does not depend on allow_url_fopen, and it reports why a download failed.
+	 *
+	 * @param string $url
+	 * @param string $destination Full path of the file to write
+	 * @return string Empty string on success, otherwise the reason for the failure
+	 */
+	protected function downloadUrl($url, $destination) {
+		$http = new WireHttp();
+		$this->wire($http);
+		$options = array();
+		if($this->user_agent) {
+			// WireHttp::download() does not send headers added with setHeader(), so the
+			// user agent is passed as an option instead: "user_agent" is used by the fopen
+			// method and CURLOPT_USERAGENT by the curl method
+			$options['user_agent'] = $this->user_agent;
+			if(defined('CURLOPT_USERAGENT')) {
+				$options['curl_setopt'] = array(CURLOPT_USERAGENT => $this->user_agent);
+			}
+		}
+		try {
+			$http->download($url, $destination, $options);
+		} catch(\Exception $e) {
+			// An HTTP status says it best, e.g. "404 Not Found"
+			if($http->getHttpCode() >= 400) return $http->getHttpCode(true);
+			// Otherwise the last underlying error, without PHP's "2: " prefix
+			$errors = $http->getError(true);
+			$error = $errors ? (string) end($errors) : $e->getMessage();
+			return preg_replace('/^\d+:\s*/', '', trim(preg_replace('/\s+/', ' ', $error)));
+		}
+		return '';
 	}
 
 	/**
