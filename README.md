@@ -34,6 +34,18 @@ $page->getUnformatted('file_field')->addFromUrl("https://domain.com/path-to-file
 
 Should you have an issue using the method, please have a look at the "errors" log to check if something was wrong with your URL(s).
 
+### Security
+
+Only `http` and `https` URLs are downloaded, and only from hosts that resolve to public IP addresses. URLs pointing at the server itself, the local network or cloud metadata services are refused, including when a public URL redirects to one. If you need to add files from an internal host, hook `AddImageUrls::isAllowedHost`:
+
+```php
+$wire->addHookAfter('AddImageUrls::isAllowedHost', function(HookEvent $event) {
+	if($event->arguments(0) === 'images.intranet.local') $event->return = true;
+});
+```
+
+Downloaded files go through any installed FileValidator modules (e.g. [FileValidatorSvgSanitizer](https://github.com/ryancramerdesign/FileValidatorSvgSanitizer)) in the same way as normal uploads, and extensions that require a validator are only accepted when one is installed or the extension is whitelisted in the field settings.
+
 ### WebP conversion
 
 The core InputfieldImage does not support images in WebP format. But if you have the [WebP To Jpg](https://github.com/Toutouwai/WebpToJpg) module installed (v0.2.0 or newer) then any WebP images you add via Add Image URLs will be automatically converted to JPG format.
